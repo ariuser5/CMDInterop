@@ -11,7 +11,7 @@ namespace CMDInterop
         const int WAIT_MILLIS = 500;
 
 
-        static string RunCommand(string command, string retvar = null)
+        public static string RunCommand(string command, string retvar = null)
         {
             var myCmd = command.Equals(string.Empty) ?
                 $"echo {retvar}=%{retvar}%" :
