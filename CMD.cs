@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 
 namespace CMDInterop
 {
@@ -56,9 +57,8 @@ namespace CMDInterop
                     System.Threading.Thread.Sleep(WAIT_MILLIS);
                 }
 
-                retvar = LastOrDefault(
-                    subject: outputs,
-                    predicate: s => s.StartsWith($"output>>{retvar}="))?
+                retvar = outputs
+                    .LastOrDefault(s => s.StartsWith($"output>>{retvar}="))?
                     .Replace($"output>>{retvar}=", string.Empty);
             }
 
@@ -69,22 +69,6 @@ namespace CMDInterop
             process.Close();
 
             return retvar;
-        }
-
-        static T LastOrDefault<T>(IEnumerable<T> subject, Predicate<T> predicate)
-        {
-            var retval = default(T);
-            var iterator = subject.GetEnumerator();
-
-            while(iterator.MoveNext()) {
-                var isConditionSatisfied = predicate.Invoke(iterator.Current);
-
-                if(isConditionSatisfied) {
-                    retval = iterator.Current;
-                }
-            }
-
-            return retval;
         }
 
     }
