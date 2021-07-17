@@ -1,9 +1,11 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 15
-VisualStudioVersion = 15.0.28307.1000
+# Visual Studio Version 16
+VisualStudioVersion = 16.0.30320.27
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CMDInterop", "CMDInterop.csproj", "{C31CBA35-7246-4F6A-99D3-05B221D0F861}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Tester", "Tester\Tester.csproj", "{6F25CAC6-AF5B-49FD-BD9F-3F6766580E30}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CMDInterop", "CMDInterop\CMDInterop.csproj", "{C31CBA35-7246-4F6A-99D3-05B221D0F861}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -11,6 +13,10 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{6F25CAC6-AF5B-49FD-BD9F-3F6766580E30}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6F25CAC6-AF5B-49FD-BD9F-3F6766580E30}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6F25CAC6-AF5B-49FD-BD9F-3F6766580E30}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6F25CAC6-AF5B-49FD-BD9F-3F6766580E30}.Release|Any CPU.Build.0 = Release|Any CPU
 		{C31CBA35-7246-4F6A-99D3-05B221D0F861}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{C31CBA35-7246-4F6A-99D3-05B221D0F861}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C31CBA35-7246-4F6A-99D3-05B221D0F861}.Release|Any CPU.ActiveCfg = Release|Any CPU
