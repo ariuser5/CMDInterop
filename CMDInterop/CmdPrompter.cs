@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace CMDInterop
 {
@@ -21,9 +22,9 @@ namespace CMDInterop
 		const int REFRESH_RATE = 100;
 		const int MAX_EXEC_TIMEOUT = 120000;
 		const int MIN_EXEC_TIMEOUT = 100;
+		const string VAR_QUERY_FLAG = "#:";
 
 		string _startLocation;
-		bool _isPending;
 		Process _cmdProcess;
 
 		readonly string _pendingFlag;
@@ -32,7 +33,6 @@ namespace CMDInterop
 
 		public CmdPrompter()
 		{
-			this._isPending = false;
 			this._pendingFlag = Guid.NewGuid().ToString();
 			this._capturedVars = new Dictionary<string, string>();
 			this._streams = new Dictionary<object, OutputVerbosityTypes>();
@@ -64,10 +64,12 @@ namespace CMDInterop
 		public IEnumerable<string> CaptureVariables {
 			get => this._capturedVars.Select(w => w.Key);
 			set {
-				var intersection = value.Intersect(this._capturedVars.Keys);
+				var union = value.Union(this._capturedVars.Keys);
 
-				foreach(var key in intersection) {
-					if(!this._capturedVars.ContainsKey(key)) {
+				foreach(var key in union) {
+					if(value.Contains(key) &&
+					   !this._capturedVars.ContainsKey(key)) {
+
 						this._capturedVars.Add(key, null);
 					} else if(value.Contains(key) == false) {
 						this._capturedVars.Remove(key);
@@ -100,14 +102,26 @@ namespace CMDInterop
 			this._cmdProcess.ErrorDataReceived += EvaluateOutput;
 			this._cmdProcess.BeginErrorReadLine();
 
-			this._cmdProcess.StandardInput.WriteLine(this._pendingFlag);
+			this._cmdProcess.StandardInput.WriteLine($"echo {this._pendingFlag}");
 			this.WaitForCommandFinish();
 		}
 
 		void EvaluateOutput(object sender, DataReceivedEventArgs e)
 		{
+			var varQueryPattern = $"^{VAR_QUERY_FLAG}.+=";
+			var match = Regex.Match(e.Data, varQueryPattern);
+
 			if(e.Data == this._pendingFlag) {
 				this.IsPendingForCommand = true;
+			}
+
+			if(match.Success) {
+				var varName = match.Value
+					.Replace(VAR_QUERY_FLAG, string.Empty)
+					.Replace("=", string.Empty);
+				var varValue = e.Data.Replace(match.Value, string.Empty);
+
+				this._capturedVars[varName] = varValue;
 			}
 
 			void WriteLineToOutputStream(object stream)
@@ -125,21 +139,21 @@ namespace CMDInterop
 				}
 			}
 
-			foreach(var stream in this._streams) {
+			foreach(var streamKvp in this._streams) {
 
 				// TODO
 
-				switch(stream.Value) {
+				switch(streamKvp.Value) {
 					case OutputVerbosityTypes.Normal:
-						WriteLineToOutputStream(stream);
+						WriteLineToOutputStream(streamKvp.Key);
 						break;
 
 					case OutputVerbosityTypes.Debug:
-						WriteLineToOutputStream(stream);
+						WriteLineToOutputStream(streamKvp.Key);
 						break;
 
 					case OutputVerbosityTypes.Detailed:
-						WriteLineToOutputStream(stream);
+						WriteLineToOutputStream(streamKvp.Key);
 						break;
 				}
 			}
@@ -209,6 +223,11 @@ namespace CMDInterop
 
 					this._cmdProcess.StandardInput.WriteLine(myCmd);
 					this.IsPendingForCommand = false;
+
+					foreach(var captureVar in this.CaptureVariables) {
+						this._cmdProcess.StandardInput.WriteLine(
+							$"echo {VAR_QUERY_FLAG}{captureVar}=%{captureVar}%");
+					}
 
 				} else {
 					throw new InvalidOperationException(

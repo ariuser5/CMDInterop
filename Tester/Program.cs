@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -13,9 +14,18 @@ namespace Tester
 		{
 			var prompter = new CmdPrompter
 			{
-				StartLocation = "scripts"
+				StartLocation = "scripts",
+				CaptureVariables = new[] { "PATH" }
 			};
 
+			prompter.SetOutputStream(Console.Out);
+			prompter.Start();
+			prompter.Execute("vs_dirset");
+			prompter.WaitForCommandFinish();
+
+			var result = prompter.ReadCapturedVariable("PATH");
+
+			Console.ReadKey();
 		}
 	}
 }
