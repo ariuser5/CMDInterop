@@ -88,7 +88,8 @@ namespace CMDInterop
 				UseShellExecute = false,
 				RedirectStandardInput = true,
 				RedirectStandardOutput = true,
-				RedirectStandardError = true
+				RedirectStandardError = true,
+				WorkingDirectory = this.StartLocation
 			};
 
 			this._cmdProcess = Process.Start(procStartInfo);
@@ -112,13 +113,13 @@ namespace CMDInterop
 			void WriteLineToOutputStream(object stream)
 			{
 				if(stream is StringBuilder sb) {
-
-				} else
-				if(stream is Stream str) {
-
+					sb.AppendLine(e.Data);
 				} else
 				if(stream is TextWriter tr) {
-
+					tr.WriteLine(e.Data);
+				} else
+				if(stream is Stream str) {
+					throw new NotImplementedException();
 				} else {
 					throw new NotSupportedException();
 				}
@@ -218,12 +219,6 @@ namespace CMDInterop
 				throw new InvalidOperationException(
 					"Cannot execute command because the process is not opened.");
 			}
-
-			void RecordOutput(object sender, DataReceivedEventArgs e)
-			{
-				outputs.Add($"output>>{e.Data}");
-				this._isPending |= e.Data == this._pendingFlag;
-			}
 		}
 
 		public void WaitForCommandFinish(int waitTime = 0)
@@ -272,22 +267,58 @@ namespace CMDInterop
 			StringBuilder stringBuilder,
 			OutputVerbosityTypes outputVerbosity = OutputVerbosityTypes.Normal)
 		{
-
-		}
-
-		public void SetOutputStream(
-			Stream stream,
-			Encoding encoding,
-			OutputVerbosityTypes outputVerbosity = OutputVerbosityTypes.Normal)
-		{
-			encoding.
+			this._streams.Add(stringBuilder, outputVerbosity);
 		}
 
 		public void SetOutputStream(
 			TextWriter textWriter,
 			OutputVerbosityTypes outputVerbosity = OutputVerbosityTypes.Normal)
 		{
+			this._streams.Add(textWriter, outputVerbosity);
+		}
 
+		/// <summary>
+		/// TODO
+		/// </summary>
+		/// <param name="stream"></param>
+		/// <param name="encoding"></param>
+		/// <param name="outputVerbosity"></param>
+		public void SetOutputStream(
+			Stream stream,
+			Encoding encoding,
+			OutputVerbosityTypes outputVerbosity = OutputVerbosityTypes.Normal)
+		{
+			throw new NotImplementedException();
+		}
+
+		public bool RemoveOutputStream(StringBuilder stringBuilder)
+		{
+			return this._RemoveOutputStream(stringBuilder);
+		}
+
+		public bool RemoveOutputStream(TextWriter textWriter)
+		{
+			return this._RemoveOutputStream(textWriter);
+		}
+
+		/// <summary>
+		/// TODO
+		/// </summary>
+		/// <param name="stringBuilder"></param>
+		/// <returns></returns>
+		public bool RemoveOutputStream(Stream stream)
+		{
+			throw new NotImplementedException();
+		}
+
+		bool _RemoveOutputStream(object stream)
+		{
+			if(this._streams.ContainsKey(stream)) {
+				this._streams.Remove(stream);
+				return true;
+			} else {
+				return false;
+			}
 		}
 
 	}
