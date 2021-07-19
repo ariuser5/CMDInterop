@@ -33,12 +33,13 @@ echo SUCCESS: set '%vs_folder%' into environment variable "PATH"
 goto :end
 
 :fail
-echo FAILED: 'vs_folder=%devenv_exec%'
+set "vs_folder="
+echo FAILED: 'vs_folder='
 goto :end
 
 
 :end
 endlocal & (
-	set "PATH=%vs_folder%"
+	set "PATH=%PATH%;%vs_folder%"
 	exit /b
 )

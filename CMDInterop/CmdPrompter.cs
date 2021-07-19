@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 
 namespace CMDInterop
 {
@@ -23,31 +24,50 @@ namespace CMDInterop
 		const int MAX_EXEC_TIMEOUT = 120000;
 		const int MIN_EXEC_TIMEOUT = 100;
 		const string VAR_QUERY_FLAG = "#:";
+		const string CMD_CALL_PATTERN = "&(( *)?echo $(x)(&|$))";
+		const string CALL_ECHO_PATTERN = "((.*?)>).+";
 
 		string _startLocation;
+		string _lastOutputLog;
+		bool _isExecuting;
+		bool _hideOutput;
+		bool _isMultilineDefinitionContent;
+		int _multilineDefinitionDepth;
+		StringBuilder _lastCommandSb;
 		Process _cmdProcess;
+		Queue<Action> _postExecutionCommands;
 
-		readonly string _pendingFlag;
+		readonly string _hiddenOutputFlag;
+		readonly string _commandCompletedFlag;
 		readonly Dictionary<string, string> _capturedVars;
 		readonly Dictionary<object, OutputVerbosityTypes> _streams;
 
 		public CmdPrompter()
 		{
-			this._pendingFlag = Guid.NewGuid().ToString();
+			this._commandCompletedFlag = Guid.NewGuid().ToString();
+			this._hiddenOutputFlag = Guid.NewGuid().ToString();
 			this._capturedVars = new Dictionary<string, string>();
 			this._streams = new Dictionary<object, OutputVerbosityTypes>();
-			this.IsPendingForCommand = false;
+			this._lastCommandSb = new StringBuilder();
+			this._postExecutionCommands = new Queue<Action>();
 
 			this.ResetStartLocation();
 		}
 
 
-		public bool IsPendingForCommand { get; private set; }
+		public bool IsIdle {
+			get => !this._isExecuting && !this._postExecutionCommands.Any();
+		}
 
 		public bool IsOpened {
 			get => !(this._cmdProcess?.HasExited) ?? false;
 		}
 
+		public string LastCommand {
+			get => this._lastCommandSb.ToString() == string.Empty ?
+				null :
+				this._lastCommandSb.ToString();
+		}
 
 		public string StartLocation {
 			get => this._startLocation;
@@ -82,6 +102,16 @@ namespace CMDInterop
 
 
 
+		void ExecuteHiddenCommand(string command)
+		{
+			var managedCmd = $"{command}" +
+				$"& echo {this._commandCompletedFlag}" +
+				$"& echo {this._hiddenOutputFlag}";
+
+			this._isExecuting = true;
+			this._cmdProcess.StandardInput.WriteLine(managedCmd);
+		}
+
 		public void Start()
 		{
 			var procStartInfo = new ProcessStartInfo("cmd.exe")
@@ -102,60 +132,10 @@ namespace CMDInterop
 			this._cmdProcess.ErrorDataReceived += EvaluateOutput;
 			this._cmdProcess.BeginErrorReadLine();
 
-			this._cmdProcess.StandardInput.WriteLine($"echo {this._pendingFlag}");
-			this.WaitForCommandFinish();
-		}
+			this.ExecuteHiddenCommand($"echo {this._commandCompletedFlag}");
 
-		void EvaluateOutput(object sender, DataReceivedEventArgs e)
-		{
-			var varQueryPattern = $"^{VAR_QUERY_FLAG}.+=";
-			var match = Regex.Match(e.Data, varQueryPattern);
-
-			if(e.Data == this._pendingFlag) {
-				this.IsPendingForCommand = true;
-			}
-
-			if(match.Success) {
-				var varName = match.Value
-					.Replace(VAR_QUERY_FLAG, string.Empty)
-					.Replace("=", string.Empty);
-				var varValue = e.Data.Replace(match.Value, string.Empty);
-
-				this._capturedVars[varName] = varValue;
-			}
-
-			void WriteLineToOutputStream(object stream)
-			{
-				if(stream is StringBuilder sb) {
-					sb.AppendLine(e.Data);
-				} else
-				if(stream is TextWriter tr) {
-					tr.WriteLine(e.Data);
-				} else
-				if(stream is Stream str) {
-					throw new NotImplementedException();
-				} else {
-					throw new NotSupportedException();
-				}
-			}
-
-			foreach(var streamKvp in this._streams) {
-
-				// TODO
-
-				switch(streamKvp.Value) {
-					case OutputVerbosityTypes.Normal:
-						WriteLineToOutputStream(streamKvp.Key);
-						break;
-
-					case OutputVerbosityTypes.Debug:
-						WriteLineToOutputStream(streamKvp.Key);
-						break;
-
-					case OutputVerbosityTypes.Detailed:
-						WriteLineToOutputStream(streamKvp.Key);
-						break;
-				}
+			if(this.IsIdle == false) {
+				this.WaitForCommandFinish();
 			}
 		}
 
@@ -168,7 +148,8 @@ namespace CMDInterop
 		public void Stop()
 		{
 			if(this.IsOpened) {
-				if(this.IsPendingForCommand) {
+				if(this.IsIdle) {
+
 					this._cmdProcess.StandardInput.WriteLine("exit");
 					this.WaitForCommandFinish(MAX_EXEC_TIMEOUT);
 
@@ -214,20 +195,38 @@ namespace CMDInterop
 			}
 		}
 
+		public void ExecuteAndWait(string command)
+		{
+			if(this.IsOpened) {
+				this.Execute(command);
+				this.WaitForCommandFinish();
+			} else {
+				throw new InvalidOperationException(
+					"Cannot execute command because the process is not opened.");
+			}
+		}
+
 		public void Execute(string command)
 		{
 			if(this.IsOpened) {
-				if(this.IsPendingForCommand) {
+				if(this.IsIdle) {
 
-					var myCmd = $"{command} & echo {this._pendingFlag}";
+					var managedCmd = $"{command} & echo {this._commandCompletedFlag}";
 
-					this._cmdProcess.StandardInput.WriteLine(myCmd);
-					this.IsPendingForCommand = false;
+					this._isExecuting = true;
+					this._cmdProcess.StandardInput.WriteLine(managedCmd);
 
 					foreach(var captureVar in this.CaptureVariables) {
-						this._cmdProcess.StandardInput.WriteLine(
-							$"echo {VAR_QUERY_FLAG}{captureVar}=%{captureVar}%");
+						var captureCommand =
+							$"echo {VAR_QUERY_FLAG}{captureVar}=%{captureVar}%";
+
+						void CaptureVariable()
+							=> this.ExecuteHiddenCommand(captureCommand);
+
+						this._postExecutionCommands.Enqueue(CaptureVariable);
 					}
+
+					this.AwaitAndDoVariableCapturing();
 
 				} else {
 					throw new InvalidOperationException(
@@ -243,7 +242,7 @@ namespace CMDInterop
 		public void WaitForCommandFinish(int waitTime = 0)
 		{
 			if(waitTime == 0) {
-				while(this.IsOpened && this.IsPendingForCommand == false) {
+				while(this.IsOpened && this.IsIdle == false) {
 					System.Threading.Thread.Sleep(REFRESH_RATE);
 				}
 
@@ -253,8 +252,8 @@ namespace CMDInterop
 
 					while(
 						this.IsOpened && (
-							this.IsPendingForCommand == false ||
-							count < waitTime)) {
+							this.IsIdle == false &&
+							count <= waitTime)) {
 
 						System.Threading.Thread.Sleep(REFRESH_RATE);
 						count += REFRESH_RATE;
@@ -266,6 +265,10 @@ namespace CMDInterop
 						$"smaller than {MIN_EXEC_TIMEOUT} or " +
 						$"greater than {MAX_EXEC_TIMEOUT}.");
 				}
+			}
+
+			if(this.IsIdle == false) {
+				throw new TimeoutException();
 			}
 		}
 
@@ -339,6 +342,191 @@ namespace CMDInterop
 				return false;
 			}
 		}
+
+		void EvaluateOutput(object sender, DataReceivedEventArgs e)
+		{
+			var isCommand = false;
+
+			if(e.Data == this._commandCompletedFlag) {
+				this._isExecuting = false;
+			} else if(this.IsCommand(e.Data)) {
+				isCommand = true;
+				this._lastCommandSb.AppendLine(e.Data);
+			}
+
+			if(e.Data.EndsWith(this._hiddenOutputFlag)) {
+				this._hideOutput = true;
+			} else if(
+				e.Data == string.Empty &&
+				this._lastOutputLog == this._hiddenOutputFlag) {
+
+				this._hideOutput = false;
+			}
+
+			this.UpdateVariableIfCapturing(e.Data);
+			this.ParseForMultilineDefinition(e.Data);
+
+			if(this._multilineDefinitionDepth > 0) {
+				this._isMultilineDefinitionContent = true;
+			}
+
+			if(this._isMultilineDefinitionContent && isCommand == false) {
+				this._lastCommandSb.AppendLine(e.Data);
+			}
+
+			this.WriteLogToStreams(e.Data, this.WriteLineToOutputStream);
+
+			if(this._multilineDefinitionDepth == 0) {
+				this._isMultilineDefinitionContent = false;
+			}
+
+			this._lastOutputLog = e.Data;
+		}
+
+		bool IsCommand(string logMessage)
+		{
+			var callEchoMatch = Regex.Match(logMessage, CALL_ECHO_PATTERN);
+
+			if(callEchoMatch.Success &&
+			   Directory.Exists(callEchoMatch.Groups[2].Value)) {
+
+				return true;
+			}
+
+			return false;
+		}
+
+		void UpdateVariableIfCapturing(string logMessage)
+		{
+			var varQueryPattern = $"^{VAR_QUERY_FLAG}.+=";
+			var match = Regex.Match(logMessage, varQueryPattern);
+
+			if(match.Success) {
+				var varName = match.Value
+					.Replace(VAR_QUERY_FLAG, string.Empty)
+					.Replace("=", string.Empty);
+				var varValue = logMessage.Replace(match.Value, string.Empty);
+
+				this._capturedVars[varName] = varValue;
+			}
+		}
+
+		void WriteLineToOutputStream(object stream, string outputLog)
+		{
+			if(stream is StringBuilder sb) {
+				sb.AppendLine(outputLog);
+			} else
+			if(stream is TextWriter tr) {
+				tr.WriteLine(outputLog);
+			} else
+			if(stream is Stream str) {
+				throw new NotImplementedException();
+			} else {
+				throw new NotSupportedException();
+			}
+		}
+
+		void WriteLogToStreams(string logMessage, Action<object, string> writing)
+		{
+			void WriteTo(object stream) { writing.Invoke(stream, logMessage); }
+
+			foreach(var streamKvp in this._streams) {
+
+				if(streamKvp.Value == OutputVerbosityTypes.Detailed) {
+					WriteTo(streamKvp.Key);
+				} else {
+
+					if(this._hideOutput) {
+						return;
+					} else if(logMessage == this._commandCompletedFlag) {
+						continue;
+					} else if(logMessage == this._hiddenOutputFlag) {
+						this._hideOutput = false;
+						continue;
+					} else {
+
+						var cmdCallPattern = CMD_CALL_PATTERN.Replace(
+							oldValue: "$(x)",
+							newValue: this._commandCompletedFlag);
+						var cmdCallMatch = Regex.Match(logMessage, cmdCallPattern);
+
+						if(cmdCallMatch.Success) {
+							logMessage = logMessage.Replace(
+								oldValue: cmdCallMatch.Value,
+								newValue: string.Empty);
+						}
+					}
+
+					if(streamKvp.Value == OutputVerbosityTypes.Normal) {
+
+						if(this._isMultilineDefinitionContent ||
+						   logMessage == string.Empty && this.LastCommand != null) {
+
+							continue;
+						} else {
+							var cmdEchoMatch = Regex.Match(logMessage, CALL_ECHO_PATTERN);
+
+							if(cmdEchoMatch.Success == false) {
+								WriteTo(streamKvp.Key);
+							}
+						}
+
+					} else {
+						WriteTo(streamKvp.Key);
+					}
+
+				}
+
+			}
+		}
+
+		void AwaitAndDoVariableCapturing()
+		{
+			var awaiter = new Thread(WaitForCommandToFinishAndCaptureVariables);
+			awaiter.Start();
+
+			void WaitForCommandToFinishAndCaptureVariables()
+			{
+				while(this._postExecutionCommands.Any()) {
+					var currCapturing = this._postExecutionCommands.Dequeue();
+
+					while(this.IsOpened && this._isExecuting) {
+						Thread.Sleep(REFRESH_RATE);
+					}
+
+					currCapturing.Invoke();
+				}
+			}
+		}
+
+		void ParseForMultilineDefinition(string outputLog)
+		{
+			CharEnumerator iterator;
+			char lastChar = default;
+
+			var definition = outputLog;
+			var cmdEchoMatch = Regex.Match(outputLog, CALL_ECHO_PATTERN);
+
+			if(cmdEchoMatch.Success) {
+				definition = outputLog.Replace(
+					oldValue: cmdEchoMatch.Groups[1].Value,
+					newValue: string.Empty);
+			}
+
+			iterator = definition.GetEnumerator();
+
+			while(iterator.MoveNext()) {
+				if(iterator.Current == '(' && lastChar != '^') {
+					this._multilineDefinitionDepth++;
+				} else if(iterator.Current == ')' && lastChar != '^') {
+					this._multilineDefinitionDepth--;
+				}
+
+				lastChar = iterator.Current;
+			}
+
+		}
+
 
 	}
 }
