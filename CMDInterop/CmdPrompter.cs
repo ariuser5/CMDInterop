@@ -104,9 +104,13 @@ namespace CMDInterop
 
 		void ExecuteHiddenCommand(string command)
 		{
-			var managedCmd = $"{command}" +
-				$"& echo {this._commandCompletedFlag}" +
+			var managedCmd =
+				$"echo {this._commandCompletedFlag}" +
 				$"& echo {this._hiddenOutputFlag}";
+
+			if(string.IsNullOrEmpty(command)) {
+				managedCmd = $"{command}& {managedCmd}";
+			}
 
 			this._isExecuting = true;
 			this._cmdProcess.StandardInput.WriteLine(managedCmd);
@@ -132,7 +136,7 @@ namespace CMDInterop
 			this._cmdProcess.ErrorDataReceived += EvaluateOutput;
 			this._cmdProcess.BeginErrorReadLine();
 
-			this.ExecuteHiddenCommand($"echo {this._commandCompletedFlag}");
+			this.ExecuteHiddenCommand("");
 
 			if(this.IsIdle == false) {
 				this.WaitForCommandFinish();
