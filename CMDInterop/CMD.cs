@@ -5,6 +5,8 @@ using System.Linq;
 
 namespace CMDInterop
 {
+
+	[Obsolete]
 	public static class CMD
 	{
 
