@@ -8,28 +8,47 @@ using CMDInterop;
 
 namespace Tester
 {
-	class Program
-	{
-		static void Main(string[] args)
-		{
-			var prompter = new CmdPrompter
-			{
-				StartLocation = "scripts",
-				CaptureVariables = new[] { "vs_folder", "PATH", "myvar" }
-			};
+    class Program
+    {
+        static void Main(string[] args)
+        {
+            TestOpenAndReopen();
+            Console.ReadKey();
+        }
 
-			prompter.SetOutputStream(Console.Out, CmdPrompter.OutputVerbosityTypes.Detailed);
-			prompter.Start();
+        static void TestOpenAndReopen()
+        {
+            var prompter = new CmdPrompter
+            {
+                StartLocation = "scripts",
+                CaptureVariables = new[] { "PATH" }
+            };
 
-			try {
-				prompter.Execute("vs_dirset", 3000);
-			} catch(Exception ex) {
-				throw new Exception("", ex);
-			}
+            prompter.SetOutputStream(Console.Out, CmdPrompter.OutputVerbosityTypes.Detailed);
+            prompter.Start();
 
-			var result = prompter.ReadCapturedVariable("vs_folder");
+            try {
+                prompter.Execute("vs_dirset");
+            } catch(Exception ex) {
+                throw new Exception("", ex);
+            }
 
-			Console.ReadKey();
-		}
-	}
+            prompter.Stop();
+
+            var result = prompter.CapturedVariables["PATH"];
+            prompter.CapturedVariables["PATH"] = null;
+            result = prompter.CapturedVariables["PATH"];
+
+            prompter.Start();
+
+            try {
+                prompter.Execute("vs_dirset");
+            } catch(Exception ex) {
+                throw new Exception("", ex);
+            }
+
+            result = prompter.CapturedVariables["PATH"];
+        }
+
+    }
 }

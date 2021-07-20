@@ -22,7 +22,7 @@ namespace CMDInterop
 
         const int REFRESH_RATE = 100;
         const int MAX_EXEC_TIMEOUT = 120000;
-        const int MIN_EXEC_TIMEOUT = 100;
+        const int MIN_EXEC_TIMEOUT = 1;
         const string VAR_QUERY_FLAG = "#:";
         const string CMD_CALL_PATTERN = "&(( *)?echo $(x)(&|$))";
         const string CALL_ECHO_PATTERN = "((.*?)>).+";
@@ -366,12 +366,11 @@ namespace CMDInterop
         void EvaluateOutput(object sender, DataReceivedEventArgs e)
         {
             var ranToCompletion = !this._isExecuting;
-            var isCommand = false;
 
             if(e.Data == this._commandCompletedFlag) {
                 ranToCompletion = true;
             } else if(e.Data != null) {
-                isCommand = this.IsCommand(e.Data);
+                var isCommand = this.IsCommand(e.Data);
 
                 if(isCommand) {
                     this._lastCommandSb = new StringBuilder(e.Data);
