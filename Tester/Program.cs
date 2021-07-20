@@ -15,15 +15,19 @@ namespace Tester
 			var prompter = new CmdPrompter
 			{
 				StartLocation = "scripts",
-				CaptureVariables = new[] { "PATH" }
+				CaptureVariables = new[] { "vs_folder", "PATH", "myvar" }
 			};
 
-			prompter.SetOutputStream(Console.Out);
+			prompter.SetOutputStream(Console.Out, CmdPrompter.OutputVerbosityTypes.Detailed);
 			prompter.Start();
-			prompter.Execute("vs_dirset");
-			prompter.WaitForCommandFinish();
 
-			var result = prompter.ReadCapturedVariable("PATH");
+			try {
+				prompter.Execute("vs_dirset", 3000);
+			} catch(Exception ex) {
+				throw new Exception("", ex);
+			}
+
+			var result = prompter.ReadCapturedVariable("vs_folder");
 
 			Console.ReadKey();
 		}
