@@ -48,7 +48,6 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="CapturedVariableCollection.cs" />
-    <Compile Include="CMD.cs" />
     <Compile Include="CmdPrompter.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

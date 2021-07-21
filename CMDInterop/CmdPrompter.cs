@@ -27,6 +27,7 @@ namespace CMDInterop
         const string CMD_CALL_PATTERN = "&(( *)?echo $(x)(&|$))";
         const string CALL_ECHO_PATTERN = "((.*?)>).+";
 
+
         string _startLocation;
         bool _isExecuting;
         bool _withholdProcess;
